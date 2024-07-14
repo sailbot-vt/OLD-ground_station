@@ -1,12 +1,8 @@
-import geopy.distance
 import requests
-import json
-import time
-import os
-import sys
-import datetime
+import os, sys, time, datetime
 import cv2
 import geopy
+import geopy.distance
 import matplotlib.pyplot as plt
 
 from renderer import CV2DRenderer
@@ -14,7 +10,7 @@ from utils import *
 
 RUN_WITH_SAILOR_STANDARDS = True
 DEGREE_SIGN = u'\N{DEGREE SIGN}'
-TELEMETRY_SERVER_URL = 'http://107.23.136.207:8082/'
+TELEMETRY_SERVER_URL = 'http://3.141.26.89:8080/'
 
 pid_data_file = None
 telemetry_file = None
@@ -82,7 +78,7 @@ def get_distance_to_waypoint(cur_position, next_waypoint):
 
 
 
-def get_telemetry() -> dict:
+def request_boat_status() -> dict:
     """
     Should return a dictionary with the following keys:
         position as a latitude, longitude tuple
@@ -94,34 +90,35 @@ def get_telemetry() -> dict:
         true_wind_angle in degrees
         apparent_wind_speed in m/s
         apparent_wind_angle in degrees
-        mast_angle in degrees
+        sail_angle in degrees
         rudder_angle in degrees
         current_waypoint as a latitude, longitude tuple
         current_route as a list of latitude, longitude tuples
     """
-    telemetry = json.loads((requests.get(TELEMETRY_SERVER_URL + "api/latest").text))
-    return json.loads(telemetry["s1"])
+    boat_status = requests.get(TELEMETRY_SERVER_URL + "boat_status/get").json()
+    # print(f"boat_status: {boat_status}")
+    return boat_status
 
 
-def update_telemetry_text(telemetry: dict):
+def update_telemetry_text(boat_status: dict):
     global telemetry_file, telemetry_start_time
         
     # Convert to the units that the sailors are happy with
-    heading_cw_north = (90 - telemetry["heading"]) % 360        # ccw from true east -> cw from true north
-    bearing_cw_north = (90 - telemetry["bearing"]) % 360        # ccw from true east -> cw from true north
-    apparent_wind_angle_cw_centerline_from = (180 - telemetry["apparent_wind_angle"]) % 360         # ccw centerline measuring the direction the wind is blowing towards -> cw centerline measuring the direction the wind is blowing from
-    apparent_wind_speed_knots = 1.94384 * telemetry["apparent_wind_speed"]                          # m/s -> knots
-    true_wind_angle_cw_centerline_from =  (180 - telemetry["true_wind_angle"]) % 360                # ccw centerline measuring the direction the wind is blowing towards -> cw centerline measuring the direction the wind is blowing from
-    true_wind_speed_knots = 1.94384 * telemetry["true_wind_speed"]                                  # m/s -> knots
-    boat_speed_knots = 1.94384 * telemetry["speed"]                               # m/s -> knots
+    heading_cw_north = (90 - boat_status["heading"]) % 360        # ccw from true east -> cw from true north
+    bearing_cw_north = (90 - boat_status["bearing"]) % 360        # ccw from true east -> cw from true north
+    apparent_wind_angle_cw_centerline_from = (180 - boat_status["apparent_wind_angle"]) % 360         # ccw centerline measuring the direction the wind is blowing towards -> cw centerline measuring the direction the wind is blowing from
+    apparent_wind_speed_knots = 1.94384 * boat_status["apparent_wind_speed"]                          # m/s -> knots
+    true_wind_angle_cw_centerline_from =  (180 - boat_status["true_wind_angle"]) % 360                # ccw centerline measuring the direction the wind is blowing towards -> cw centerline measuring the direction the wind is blowing from
+    true_wind_speed_knots = 1.94384 * boat_status["true_wind_speed"]                                  # m/s -> knots
+    boat_speed_knots = 1.94384 * boat_status["speed"]                               # m/s -> knots
     
-    current_waypoint_index = telemetry["current_waypoint_index"]
+    current_waypoint_index = boat_status["current_waypoint_index"]
     
     
-    if telemetry["current_route"]:
-        distance_to_next_waypoint = get_distance_to_waypoint(telemetry["position"], telemetry["current_route"][current_waypoint_index])
+    if boat_status["current_route"]:
+        distance_to_next_waypoint = get_distance_to_waypoint(boat_status["position"], boat_status["current_route"][current_waypoint_index])
     else:
-        distance_to_next_waypoint = get_distance_to_waypoint(telemetry["position"], None)
+        distance_to_next_waypoint = get_distance_to_waypoint(boat_status["position"], None)
 
     
     if RUN_WITH_SAILOR_STANDARDS:
@@ -136,13 +133,13 @@ def update_telemetry_text(telemetry: dict):
         
     else:
         speed_unit = "m/s"
-        heading = telemetry["heading"]
-        bearing = telemetry["bearing"]
-        apparent_wind_angle = telemetry["apparent_wind_angle"]
-        apparent_wind_speed = telemetry["apparent_wind_speed"]
-        true_wind_angle  = telemetry["true_wind_angle"]
-        true_wind_speed = telemetry["true_wind_speed"]
-        boat_speed = telemetry["speed"]
+        heading = boat_status["heading"]
+        bearing = boat_status["bearing"]
+        apparent_wind_angle = boat_status["apparent_wind_angle"]
+        apparent_wind_speed = boat_status["apparent_wind_speed"]
+        true_wind_angle  = boat_status["true_wind_angle"]
+        true_wind_speed = boat_status["true_wind_speed"]
+        boat_speed = boat_status["speed"]
         
         
     # Get Formatted Time
@@ -161,35 +158,35 @@ def update_telemetry_text(telemetry: dict):
     string_to_show = ""
     string_to_show += f"Time Today: {real_life_date_time_str}                                                                                                  \n"
     string_to_show += f"Time Since Start Up: {time_since_startup_str}                                                                                          \n"
-    string_to_show += f"GPS Latitude: {telemetry['position'][0]:.8f}, GPS Longitude: {telemetry['position'][1]:.8f}                                            \n"
-    string_to_show += f"Autopilot Mode: {telemetry['state']}                                                                                                   \n"
-    string_to_show += f"Fully Autonomous Maneuver: {telemetry['full_autonomy_maneuver']}                                                                           \n"
+    string_to_show += f"GPS Latitude: {boat_status['position'][0]:.8f}, GPS Longitude: {boat_status['position'][1]:.8f}                                            \n"
+    string_to_show += f"Autopilot Mode: {boat_status['state']}                                                                                                   \n"
+    string_to_show += f"Fully Autonomous Maneuver: {boat_status['full_autonomy_maneuver']}                                                                           \n"
     string_to_show += f"Speed Over Ground: {boat_speed:.2f} {speed_unit}                                                                                       \n"
     string_to_show += f"Target Heading: {bearing:.2f}{DEGREE_SIGN}                                                                                             \n"
     string_to_show += f"Heading: {heading:.2f}{DEGREE_SIGN}                                                                                                    \n"
     string_to_show += f"True Wind Speed: {true_wind_speed:.2f} {speed_unit}, True Wind Angle {true_wind_angle:.2f}{DEGREE_SIGN}                                \n"
     string_to_show += f"Apparent Wind Speed: {apparent_wind_speed:.2f} {speed_unit}, Apparent Wind Angle: {apparent_wind_angle:.2f}{DEGREE_SIGN}               \n"
-    string_to_show += f"Target Mast Angle: {telemetry['mast_angle']:.2f}{DEGREE_SIGN}                                                                          \n"
-    string_to_show += f"Target Rudder Angle: {telemetry['rudder_angle']:.2f}{DEGREE_SIGN}                                                                      \n"
+    string_to_show += f"Target Sail Angle: {boat_status['sail_angle']:.2f}{DEGREE_SIGN}                                                                          \n"
+    string_to_show += f"Target Rudder Angle: {boat_status['rudder_angle']:.2f}{DEGREE_SIGN}                                                                      \n"
     string_to_show += f"Current Waypoint Index: {current_waypoint_index}                                                                                       \n"
     string_to_show += f"Distance to next waypoint: {distance_to_next_waypoint.m:.2f} meters                                                                        \n"
     string_to_show += "                                                                                                                                        \n"
     
     string_to_show += f"Parameters:                                                                                                                            \n"
     string_to_show += f"------------------------------------                                                                                                   \n"
-    for param_name, param_value in telemetry["parameters"].items():
+    for param_name, param_value in boat_status["parameters"].items():
         string_to_show += f"{param_name}: {param_value}                                                 \n"
     
     string_to_show += "                                                                                                                                        \n"
     string_to_show += f"Current Route:                                                                                                                         \n"
     string_to_show += f"------------------------------------                                                                                                   \n"
-    for index, waypoint in enumerate(telemetry["current_route"]):
+    for index, waypoint in enumerate(boat_status["current_route"]):
         string_to_show += f"Waypoint {index} Latitude: {waypoint[0]:.8f}, Waypoint {index} Longitude: {waypoint[1]:.8f}                                        \n"
     
     
     trailing_white_space = ""
-    for i in range(6 - len(telemetry["current_route"])):
-        trailing_white_space += "                                                                                                                                      \n"
+    # for i in range(2 - len(boat_status["current_route"])):
+    #     trailing_white_space += "                                                                                                                                      \n"
     
     # Display String and Write to Telemetry File
     move_terminal_cursor(0, 0)
@@ -205,7 +202,7 @@ def display_image(img):
         
 def update_telemetry_gui(renderer: CV2DRenderer, telemetry: dict):
     local_y, local_x = 0, 0
-    mast_dir_fix = -1 if 0 < telemetry["true_wind_angle"] < 180 else 1
+    sail_dir_fix = -1 if 0 < telemetry["true_wind_angle"] < 180 else 1
     
     absolute_true_wind_angle = telemetry["true_wind_angle"] + telemetry["heading"]
     absolute_apparent_wind_angle = telemetry["apparent_wind_angle"] + telemetry["heading"]
@@ -234,12 +231,10 @@ def update_telemetry_gui(renderer: CV2DRenderer, telemetry: dict):
     gui_state["dt_theta_boat"] = np.array([0, 0, 0])
     gui_state["theta_rudder"] = np.array([0, 0, 0])
     gui_state["dt_theta_rudder"] = np.array([0, 0, 0])
-    gui_state["theta_sail"] = np.array([mast_dir_fix * np.deg2rad(telemetry["mast_angle"]), 0, 0])
+    gui_state["theta_sail"] = np.array([sail_dir_fix * np.deg2rad(telemetry["sail_angle"]), 0, 0])
     gui_state["dt_theta_sail"] = np.array([0, 0, 0])
     gui_state["apparent_wind"] = np.array([telemetry["true_wind_speed"] * np.cos(np.deg2rad(absolute_apparent_wind_angle)), telemetry["apparent_wind_speed"] * np.sin(np.deg2rad(absolute_apparent_wind_angle))])
     gui_state["wind"] = np.array([telemetry["true_wind_speed"] * np.cos(np.deg2rad(absolute_true_wind_angle)), telemetry["true_wind_speed"] * np.sin(np.deg2rad(absolute_true_wind_angle))])
-    # print(absolute_apparent_wind_angle)
-    # print(absolute_true_wind_angle)
     gui_state["water"] = np.array([0, 0])
     gui_state["buoys"] = np.array(BUOYS)
     gui_state["cur_waypoint"] = telemetry["current_waypoint_index"]
@@ -295,7 +290,7 @@ def main():
     
     clear_screen()
     hide_terminal_cursor()
-    telemetry = get_telemetry()
+    telemetry = request_boat_status()
     
     map_bounds = np.array(MAP_BOUNDS)
     renderer = CV2DRenderer()
@@ -310,10 +305,10 @@ def main():
     
     
     while True:
-        telemetry = get_telemetry()
-        update_telemetry_text(telemetry)
-        update_telemetry_gui(renderer, telemetry)
-        update_heading_pid_graph(telemetry)
+        boat_status = request_boat_status()
+        update_telemetry_text(boat_status)
+        update_telemetry_gui(renderer, boat_status)
+        update_heading_pid_graph(boat_status)
         
         
         time.sleep(0.05)
@@ -323,7 +318,7 @@ if __name__ == "__main__":
     try:
         main()
     finally:
-        # clear_screen()
+        clear_screen()
         show_terminal_cursor()
         telemetry_file.close()
         
